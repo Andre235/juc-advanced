@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicStampedReference;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * @author : Jeffersonnn
@@ -51,5 +52,7 @@ public class CASDemo {
             atomicReference.compareAndSet(1, 2, stamp, stamp + 1);
             System.out.println("b1 ---> " + atomicReference.getStamp());
         },"b").start();
+
+        ReentrantLock reentrantLock = new ReentrantLock();
     }
 }
