@@ -937,7 +937,7 @@ public static void main(String[] args) {
 
 - 保证可见性
 - 不保证原子性
-- 禁止指令重排
+- 避免指令重排
 
 **共享变量从主内存到线程的工作内存的8个步骤：**
 
@@ -947,7 +947,7 @@ public static void main(String[] args) {
 
 ![image-20200614104226722](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20200614104226722.png)
 
-> 不保证可见性
+#### 12.1保证可见性
 
 ```java
 /**
@@ -983,7 +983,7 @@ public class VolatileDemo {
 }
 ```
 
-> 不保证原子性
+#### 12.2不保证原子性
 
 即一个线程在执行过程中（8个步骤）是不能被打扰，不能被分割的，要么全部成功，要么全部失败。
 
@@ -1025,21 +1025,240 @@ public class VolatileACIDDemo {
 }
 ```
 
-> 禁止指令重排
+如何实现不使用lock锁和synchronized关键字来保证线程的原子操作？
 
-### 13.玩转单例模式
+使用juc包中的原子类就可以实现。这些原子类底层是直接与操作系统交互的，直接在内存中修改值，方法都为原生的native方法。
 
-### 14.深入理解CAS
+```java
+/**
+ * @author : 赵静超
+ * @date : 2020/6/14
+ * @description :
+ * 线程原子性：线程在执行过程中不能被打断，要么全部成功，要么全部失败
+ * volatile关键字不保证线程的原子性操作
+ *
+ * 解决方案：
+ *      要求不使用Lock锁和Synchronized关键字来实现线程的原子操作
+ *      使用juc包中的原子类可以解决该问题
+ */
+public class VolatileACIDDemo {
 
-### 15.原子引用
+    //private static volatile int num = 0;
+    private static AtomicInteger num = new AtomicInteger(1);
 
-### 16.各种锁的理解
+    public static void main(String[] args) {
+        //开启20条线程
+        for (int i = 0; i < 20; i++) {
+            //每条线程循环调用1000次 add()方法，预期结果 num = 20000
+            new Thread(()->{
+                for (int j = 0; j < 1000; j++) {
+                    add();
+                }
+            }).start();
+        }
 
-#### 16.1公平锁、非公平锁
+        //java程序中最少有2条线程在执行（main线程和GC垃圾回收线程）
+        //如果活跃的线程数大于2，说明除了main线程和GC线程外还有线程在工作，则进行礼让，即不执行while循环以下的程序
+        while (Thread.activeCount() > 2){
+            Thread.yield();
+        }
 
-#### 16.2可重入锁
+        System.out.println("num值为 " + num);
+    }
 
-#### 16.3自旋锁
+    private static void add() {
+        //num ++;
+        num.getAndIncrement();
+    }
+}
+```
 
-#### 16.1死锁
+#### 12.3指令重排
 
+**概念：**计算机并不是按照你写的程序的顺序去执行的
+
+**指令重排过程：**源代码--->编译器优化的重排--->指令并行会重排--->内存系统也会重排--->程序执行
+
+**指令重排约定：**编译器在进行指令重排的时候会考虑数据之间的依赖问题
+
+> 举例：
+
+```java
+int x = 1; //1
+int y = 2; //2
+x = x + 5; //3
+y = x * x; //4
+
+//我们所期望的程序执行顺序是1 2 3 4顺序执行
+//但是计算机的执行过程可能是2 1 3 4，也有可能是1 3 2 4
+//但是绝对不可能出现3 1 4 2的这种情况，因为处理器首先会考虑数据之间的依赖问题，首先先声明变量x，才会进行 
+// x = x + 5操作
+```
+
+> 变量a b x y初始值为0
+>
+> 正常的执行顺序及结果
+
+| 线程A | 线程B |
+| ----- | ----- |
+| x = a | y = b |
+| b = 1 | a = 1 |
+
+正常的执行结果为：x = 0 ：y = 0;
+
+> 但是由于指令重排机制，会出现异常的执行顺序
+
+| 线程A | 线程B |
+| ----- | ----- |
+| b = 1 | a = 1 |
+| x = a | y = b |
+
+异常的执行结果为 x = 1; y = 1
+
+**总结：**volatile关键字可以保证内存可见性，但是不保证线程的原子性操作（可以使用juc的原子类来保证线程的原子性操作），由于volatile的内存屏障机制，可以避免指令重排现象。
+
+![volatile内存屏障](https://i.loli.net/2020/06/14/x8MqEwXGkJSPAgd.png)
+
+### 13.深入理解CAS
+
+![Unsafe类](https://i.loli.net/2020/06/14/wAHTMsJ397fz2GY.png)
+
+**自旋锁：**
+
+![自旋锁](https://i.loli.net/2020/06/14/PBVwAIzyDNirfk6.png)
+
+**CAS过程：**比较当前工作内存中的值和主存中的值是否相等，如果相等是期望的值，则执行操作。
+
+```java
+AtomicInteger atomicInteger = new AtomicInteger(2020);
+
+//int expect, int update
+//expect为期望值，update为想要更新的值，如果期望值与初始值相等，则将想要更新的值赋值给初始值。
+atomicInteger.compareAndSet(2020,2021);
+System.out.println(atomicInteger.get());
+```
+
+**缺点：**
+
+- 循环耗时
+- 一次只能保证一个共享变量的原子性
+- 会导致ABA问题
+
+> ABA问题
+
+<img src="https://i.loli.net/2020/06/14/vRhxiZ1NLVBaD6T.png" alt="ABA问题" style="zoom:50%;" />
+
+
+
+线程1和线程2操作共享变量A，线程1期望A是1然后希望将其赋值为2。此刻线程2先与线程1拿到共享变量A的值，将其赋值为3，之后由将其赋值为1，此刻共享变量的值为1。但是此刻共享变量的值已经不再是初始值的那个1了。此时线程1 不知道线程2已经改变了共享变量的值。**这就是ABA问题**。
+
+线程2可以对操作共享变量的值，但是这个操作得让线程1知道。（联想MySQL表中的version字段，每次操作该记录，version值就加1）
+
+### 14.原子引用
+
+```java
+/**
+ * @author : Jeffersonnn
+ * @date : 2020/6/14 17:22
+ * @description :
+ * CAS(compare and swap)即比较并交换
+ */
+@SuppressWarnings("all")
+public class CASDemo {
+
+    private static AtomicStampedReference<Integer> atomicReference = new AtomicStampedReference<>(1,1);
+
+    public static void main(String[] args) {
+
+
+        new Thread(()->{
+            int stamp = atomicReference.getStamp();
+            System.out.println("a ---> " + stamp);
+
+            try {
+                TimeUnit.SECONDS.sleep(3);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            atomicReference.compareAndSet(1, 2, atomicReference.getStamp(), atomicReference.getStamp() + 1);
+            System.out.println("a1 ---> " + atomicReference.getStamp());
+            atomicReference.compareAndSet(2, 1, atomicReference.getStamp(), atomicReference.getStamp() + 1);
+            System.out.println("a2 ---> " + atomicReference.getStamp());
+
+        },"a").start();
+
+        new Thread(()->{
+            int stamp = atomicReference.getStamp();
+            System.out.println("b ---> " + stamp);
+
+            try {
+                TimeUnit.SECONDS.sleep(3);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            atomicReference.compareAndSet(1, 2, stamp, stamp + 1);
+            System.out.println("b1 ---> " + atomicReference.getStamp());
+        },"b").start();
+    }
+}
+```
+
+### 15.各种锁的理解
+
+#### 15.1公平锁、非公平锁
+
+- 公平锁：对资源的使用很公平，不能插队，保证先来后到的有序性。
+
+  ```java
+  public ReentrantLock(boolean fair) {
+      sync = fair ? new FairSync() : new NonfairSync();
+  }
+  ```
+
+- 非公平锁：对资源的使用不公平，可以插队（Lock锁和Synchronized关键字默认都是非公平锁实现的）
+
+  ```java
+  public ReentrantLock() {
+      sync = new NonfairSync();
+  }
+  ```
+
+#### 15.2可重入锁
+
+​	**概念：**拿到了外面的锁后，就可以拿到里面的锁了（里面的锁是自动获得的）
+
+​	<img src="https://i.loli.net/2020/06/14/46qgPeMGOlSoxdR.png" alt="可重入锁" style="zoom:50%;" />
+
+#### 15.3自旋锁
+
+```java
+/**
+ * @author : Jeffersonnn
+ * @date : 2020/6/14 19:24
+ * @description :
+ * 自定义实现自旋锁
+ */
+public class SpinLockDemo {
+
+    //传入一个Thread，初始值为null
+    AtomicReference<Thread>  atomicReference = new AtomicReference<Thread>();
+
+    //自旋锁加锁
+    public void myLock(){
+        System.out.println(Thread.currentThread().getName() + " lock");
+        //获取当前的线程
+        Thread thread = Thread.currentThread();
+        while ( ! atomicReference.compareAndSet(null,thread)){
+
+        }
+    }
+    //自旋锁解锁
+    public void myUnLock(){
+        System.out.println(Thread.currentThread().getName() + " unLock");
+        //获取当前的线程
+        Thread thread = Thread.currentThread();
+        atomicReference.compareAndSet(thread,null);
+    }
+}
+```
