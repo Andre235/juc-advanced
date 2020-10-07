@@ -1,7 +1,6 @@
 package com.geek.juc;
 
 import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -15,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 public class WaitNotifyDemo {
 
     private static boolean flag = true;
-    private static Object lock = new Object();
+    private static final Object LOCK = new Object();
 
     @SneakyThrows
     public static void main(String[] args) {
@@ -29,24 +28,25 @@ public class WaitNotifyDemo {
         @Override
         @SneakyThrows
         public void run() {
-            synchronized (lock){
+            synchronized (LOCK){
                 //满足条件则等待
                 while (flag){
                     System.out.println(Thread.currentThread() + "flag is true,wait @" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss")));
-                    lock.wait();
+                    LOCK.wait();
                 }
                 System.out.println(Thread.currentThread() + "flag is false,do something @" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss")));
             }
         }
     }
 
+    //通知线程(生产者)
     static class NotifyThread implements Runnable{
         @Override
         @SneakyThrows
         public void run() {
-            synchronized (lock){
+            synchronized (LOCK){
                 System.out.println(Thread.currentThread() + "hold lock,notify @" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss")));
-                lock.notifyAll();
+                LOCK.notifyAll();
                 flag = false;
                 Thread.sleep(5);
             }
