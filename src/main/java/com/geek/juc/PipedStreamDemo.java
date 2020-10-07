@@ -32,7 +32,6 @@ public class PipedStreamDemo {
 
     static class PrintThread implements Runnable{
         PipedReader  reader;
-
         public PrintThread(PipedReader reader) {
             this.reader = reader;
         }
