@@ -2,8 +2,6 @@ package com.geek.juc;
 
 import lombok.SneakyThrows;
 
-import javax.swing.plaf.TableHeaderUI;
-
 /**
  * @Author: geek
  * @Date: 2020/10/7 13:12
